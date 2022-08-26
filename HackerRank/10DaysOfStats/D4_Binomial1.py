@@ -2,13 +2,13 @@
 # Day 4 - Binomial Distribution 1
 
 # First binomial exercise, solved without the use of math module
-def f(x):
-    if x <= 1:
+def f(n):
+    if n <= 1:
         return 1
     factorial = 1
-    while x > 0:
-        factorial *= x
-        x -= 1
+    while n > 0:
+        factorial *= n
+        n -= 1
     return factorial
 
 
