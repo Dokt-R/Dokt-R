@@ -1,9 +1,8 @@
 ### Hi there 👋 
 
-My name is Nick and I am Electical and Electronics Engineer graduate with Energy 
-I am currently working on a career change from a CNC Programmer/Machinist to
-something more relevant to CS or Data. This repository serves as a supplement
-to a Notion personal knowledge database.
+My name is Nick and I am Electical and Electronics Engineer graduate (Energy Specialization Cycle).
+I am currently working on a career change from a CNC Programmer/Machinist to something more relevant
+to CS or Data. This repository serves as a supplement to a Notion personal knowledge database.
 <!--
 **Dokt-R/Dokt-R** is a ✨ _special_ ✨ repository because its `README.md` (this file) appears on your GitHub profile.
 
