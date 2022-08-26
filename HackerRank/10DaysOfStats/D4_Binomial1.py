@@ -3,7 +3,7 @@
 
 # First binomial exercise, solved without the use of math module
 def f(x):
-    if x == 0:
+    if x <= 1:
         return 1
     factorial = 1
     while x > 0:
