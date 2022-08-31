@@ -31,10 +31,8 @@ class Student(Person):
     #
     # Write your function here
     def calculate(self):
-        total = 0
-        for s in scores:
-            total += s
-        avg = total / len(scores)
+        total = sum(self.scores)
+        avg = total / len(self.scores)
         if avg >= 90:
             return 'O'
         elif avg >= 80:
