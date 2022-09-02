@@ -20,6 +20,7 @@ def trasnform(soup):
     for item in li:
         model = item.find('h2').text.strip()
         price = item.find('span', class_='price-no-decimals').text
+        # Sort to Selling, Leasing or Buying car
         try:
             badge = item.find('span', class_='bg-blue-700').text.strip()
         except:
@@ -28,13 +29,21 @@ def trasnform(soup):
                 badge = 'Buying'
             except:
                 badge = 'Selling'
-        # print(model, '-->', price)
+        # Get details since it is hard to get individual details like Year, Distance etc.
+        key_features = item.find(
+            class_='mt-auto mobile-bottom-left d-flex flex-column align-items-start pr-1').text.strip()
+        # Split the key features into manageable list
+        feature_list = key_features.split(',')
+        year = ''
+        print(model, '-->', feature_list)
         car = {
             'model': model,
+            'year': year,
             'price': price,
             'badge': badge,
         }
-        carlist.append(car)
+        return
+        # carlist.append(car)
     return
 
 
