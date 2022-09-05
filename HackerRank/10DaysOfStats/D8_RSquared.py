@@ -1,10 +1,9 @@
-# from sklearn.metrics import r2_score
-import statistics as ss
+# HackerRank 10 Days of Statistics
+# R Squared without sklearn or scipy
 
 n = 5
 x = [95, 85, 80, 70, 60]
 y = [85, 95, 70, 65, 70]
-# print(r2_score(x, y))
 
 # Sums
 sxi = sum(x)
