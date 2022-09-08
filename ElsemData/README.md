@@ -11,9 +11,9 @@ containing several fixed width .DAT hourly files that follow the naming convetio
 
 |Information        | Filename       |
 |-------------------|----------------|
-|Station Codename   |**A**2021036.DAT|
-|Year               |A**2021**036.DAT|
-|Day of Year        |A2021**036**.DAT|
+|Station Codename   |***A***2021036.DAT|
+|Year               |A***2021***036.DAT|
+|Day of Year        |A2021***036***.DAT|
 
 ## Loading Data
 The data gathere by the dataloggers are collected in this form as houtly data:
