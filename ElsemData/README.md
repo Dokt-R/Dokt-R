@@ -2,6 +2,21 @@
 
 This projext along with its documentation is currently a work in progress
 
+## Problem
+
+Elsem-Net is a network of telemetric stations spanning all over Greece for the monitoring of
+freacture induced electromagnetic emissions. This network produces daily files for each station
+which in turn is sent to a Network Attached Storage. This is in the form of zipped files
+containing several fixed width .DAT hourly files that follow the naming convetion bellow
+
+--------------------------------------
+|Station Codename   |**A**2021036.DAT|
+--------------------------------------
+|Year               |A**2021**036.DAT|
+--------------------------------------
+|Day of Year        |A2021**036**.DAT|
+--------------------------------------
+
 ## Loading Data
 The data gathere by the dataloggers are collected in this form as houtly data:
 
