@@ -1,4 +1,4 @@
 server
 carlist.csv
 HackerRank/cargr/
-!server/massclean.py
+!*/server/massclean.py
