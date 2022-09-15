@@ -9,6 +9,12 @@ which in turn are sent to a Network Attached Storage.
 
 <small>_*This project along with its documentation is currently a work in progress_</small>
 
+- [X] Folders
+- [X] Current File Structure
+- [ ] Legacy File Structure
+- [ ] Analysis Files
+- [ ] Automation
+
 ## The Problem
 
 <div style="text-align: justify">
