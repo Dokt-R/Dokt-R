@@ -118,9 +118,54 @@ pd.read_fwf('../RawData/A3060000.DAT')
 ```
 <small>_*Needs more testing_</small>
 
-## Data Cleaning
+## Legacy Files Data Cleaning
 
-It is obvious that our data has information in front of every row that makes it
+The [converter](https://github.com/Dokt-R/Dokt-R/blob/main/ElsemData/Python/converter.py)
+file does all the cleaning. It opens every folder, mirrors the directory into a
+./csv/ path and then converts all .DAT files to the final .csv that will be loaded
+into the database. Saving a csv instead of working on the files as is was the best
+solution, as uploading thousands of rows with pandas .to_sql() method was much 
+slower, and a sacrifice in space was a small compromise compared to the time it 
+saves. On top of that the .csv format is kept as a backup and used in MATLAB for
+analysis.
+
+### Opening Files
+
+Since legacy files are already sorted neatly into folders all we have to do is
+iterate through them. This two lines make it a breeze:
+
+```
+for subdir, dirs, files in os.walk(PATH):
+    for file in files:
+```
+
+### Database Columns
+
+Each measurement can be easily defined by *two values*. The *moment* that the 
+measurement was made and the *station* that made it. Since files are named after 
+the station's *codename* it makes sense to have the first column as a **FOREIGN
+KEY** with that *codename*. The second column is the moment in datetime to make it 
+easier to plot. The order of this is also important since by the end of the project
+there will be billion rows of data we want an ***index*** that is efficient.
+[This website](https://use-the-index-luke.com/sql/where-clause/searching-for-ranges/greater-less-between-tuning-sql-access-filter-predicates) explains why **index for
+equality should be used first.**
+
+Now there are plenty solutions that can get the right daterange for each file.
+We already mentioned that the measurements are taken each second but the formating
+was ugly, using multiple columns to define one point in time. Instead of reshaping
+everything, a pandas daterange from scratch seemed faster. All we have to use is
+the filename's Day Of Year.
+
+```
+pd.to_datetime(year * 1000 + doy, format='%Y%j')
+daterange = pd.date_range(date, periods=86400, freq='s')
+```
+
+The rest of the columns are loaded using ```.read_csv(filePath, usecols=[4, 5, 6, 7, 8, 9])``` method.
+
+## Hourly Files Data Cleaning
+
+It is obvious that hourly data has information in front of every row that makes it
 hard to read data and is not useful for analysis. This has a similar pattern
 of leading 3 characters, and they can be easily removed.
 
