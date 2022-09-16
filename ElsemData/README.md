@@ -9,6 +9,7 @@ which in turn are sent to a Network Attached Storage.
 
 - [X] Folders
 - [X] Current File Structure
+@icn-terminal Analysis Files
 - [ ] Legacy File Structure
 - [ ] Analysis Files
 - [ ] Automation
@@ -118,6 +119,8 @@ pd.read_fwf('../RawData/A3060000.DAT')
 ```
 <small>_*Needs more testing_</small>
 
+---
+
 ## Legacy Files Data Cleaning
 
 The [converter](https://github.com/Dokt-R/Dokt-R/blob/main/ElsemData/Python/converter.py)
@@ -162,6 +165,10 @@ daterange = pd.date_range(date, periods=86400, freq='s')
 ```
 
 The rest of the columns are loaded using ```.read_csv(filePath, usecols=[4, 5, 6, 7, 8, 9])``` method.
+
+---
+# EVERYTHING BELOW THIS POINT IS TEMPORARY AND SUBJECT TO CHANGE
+---
 
 ## Hourly Files Data Cleaning
 
