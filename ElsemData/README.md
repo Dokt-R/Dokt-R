@@ -7,11 +7,11 @@ which in turn are sent to a Network Attached Storage.
 
 <small>_*This project along with its documentation is currently a work in progress_</small>
 
-- [X] Folders
-- [X] Current File Structure
-@icn-terminal Analysis Files
+- [X] Folders & File Structure
+- [X] Upload Analysis Files
+- [ ] OOP Analysis
+- [ ] Dealing with NULLs
 - [ ] Legacy File Structure
-- [ ] Analysis Files
 - [ ] Automation
 
 ## The Problem
@@ -118,6 +118,13 @@ Alternatively, since technically it is not a .csv but a fixed width .DAT file:
 pd.read_fwf('../RawData/A3060000.DAT')
 ```
 <small>_*Needs more testing_</small>
+
+### Analysis
+
+Analysis files are taken from MATLAB files and rewritten as python code. At the
+moment of writing they are functional but not pythonic, as I was still beggining
+to code. Most likely I will PEP8 the 3 scripts containing analysis and make a 
+seperate file utilising OOP.
 
 ---
 
