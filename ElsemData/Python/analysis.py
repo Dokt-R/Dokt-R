@@ -109,10 +109,11 @@ class SeriesAnalysis:
                      'tsallis': np.repeat(tsallis, self.frame_size)},
                     index=list(i for i in range(start, stop)))
                 entropies = pd.concat([entropies, results])
+        # Sort each channel by index
+        entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
 
 CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-analysis = SeriesAnalysis(CSV_PATH, 'ch1')
+analysis = SeriesAnalysis(CSV_PATH)
 entropies = analysis.entropy_analysis()
-print(entropies)
