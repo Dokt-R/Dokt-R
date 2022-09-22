@@ -75,7 +75,7 @@ class SeriesAnalysis:
         E.g: Series[1024:2048]'''
         start = frame_number * self.inc
         stop = start + self.frame_size
-        return self.df[start:stop]
+        return self.df[start:stop], start, stop
 
     def entropy_analysis(self):
         '''OUTPUT:
@@ -87,8 +87,8 @@ class SeriesAnalysis:
         '''
         entropies = pd.DataFrame()
         for frame_number in range(self.total_frames):  # forward frame sliding
-            frame = self.frame_values(frame_number)  # ! Test
-            for column in frame:
+            frame, start, stop = self.frame_values(frame_number)
+            for column in frame.columns:
                 hist, bin_edges = np.histogram(
                     frame[column])  # Histogram Graph
                 index_array = np.nonzero(hist)
@@ -106,21 +106,42 @@ class SeriesAnalysis:
                 # Tsallis Entropy
                 f_powerq = np.power(hist, self.q)
                 tsallis = (self.k / (self.q - 1)) * (1 - sum(f_powerq))
-
-                results = pd.DataFrame(
-                    {'channel': np.repeat(column, self.frame_size),
-                     'shannon': np.repeat(-shannon, self.frame_size),
-                     'fisher': np.repeat(fisher, self.frame_size),
-                     'tsallis': np.repeat(tsallis, self.frame_size)},
-                    index=list(i for i in range(start, stop)))
-                entropies = pd.concat([entropies, results])
+                # analysis_tuple = (['shannon', shannon], [])
+                # results = pd.DataFrame(
+                #     {'channel':  column,
+                #      'shannon': -shannon,
+                #      'fisher': fisher,
+                #      'tsallis': tsallis},
+                #     index=[list(i for i in range(start, stop))])
+                frame_analysis = {
+                    'shannon': -shannon,
+                    'fisher': fisher,
+                    'tsallis': tsallis}
+                results = pd.DataFrame()
+                for key, value in frame_analysis.items():
+                    if column not in results.columns:
+                        print(True)
+                    # if results is None:
+                    results = pd.DataFrame(
+                        {'analysis': key,
+                            column: value},
+                        index=[start, stop])
+                    # else:
+                    #     next_analysis = pd.DataFrame(
+                    #         {'analysis': key,
+                    #          column: value},
+                    #         index=[start, stop])
+                    entropies = pd.concat([entropies, results])
+                # entropies = pd.concat([entropies, results])
+            if frame_number == 1:
+                break
         # Sort each channel by index
-        entropies = entropies.sort_values(by=['channel'], kind='mergesort')
+        # entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
     def rs1(self, ts, n):
         '''
-        RS1 calculates Rescale Range Analysis (by Hurst) of a time-series on a 
+        RS1 calculates Rescale Range Analysis (by Hurst) of a time-series on a
         given vector of scales
 
         INPUTS:
@@ -252,5 +273,6 @@ class SeriesAnalysis:
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH)
+    analysis = SeriesAnalysis(CSV_PATH, ['ch1', 'ch2'])
     entropies = analysis.entropy_analysis()
+    print(entropies)
