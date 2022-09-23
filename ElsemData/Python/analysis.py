@@ -106,37 +106,15 @@ class SeriesAnalysis:
                 # Tsallis Entropy
                 f_powerq = np.power(hist, self.q)
                 tsallis = (self.k / (self.q - 1)) * (1 - sum(f_powerq))
-                # analysis_tuple = (['shannon', shannon], [])
-                # results = pd.DataFrame(
-                #     {'channel':  column,
-                #      'shannon': -shannon,
-                #      'fisher': fisher,
-                #      'tsallis': tsallis},
-                #     index=[list(i for i in range(start, stop))])
-                frame_analysis = {
-                    'shannon': -shannon,
-                    'fisher': fisher,
-                    'tsallis': tsallis}
-                results = pd.DataFrame()
-                for key, value in frame_analysis.items():
-                    if column not in results.columns:
-                        print(True)
-                    # if results is None:
-                    results = pd.DataFrame(
-                        {'analysis': key,
-                            column: value},
-                        index=[start, stop])
-                    # else:
-                    #     next_analysis = pd.DataFrame(
-                    #         {'analysis': key,
-                    #          column: value},
-                    #         index=[start, stop])
-                    entropies = pd.concat([entropies, results])
-                # entropies = pd.concat([entropies, results])
-            if frame_number == 1:
-                break
+                results = pd.DataFrame(
+                    {'channel':  column,
+                     'shannon': -shannon,
+                     'fisher': fisher,
+                     'tsallis': tsallis},
+                    index=[start, stop-1])
+                entropies = pd.concat([entropies, results])
         # Sort each channel by index
-        # entropies = entropies.sort_values(by=['channel'], kind='mergesort')
+        entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
     def rs1(self, ts, n):
@@ -273,6 +251,6 @@ class SeriesAnalysis:
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch1', 'ch2'])
+    analysis = SeriesAnalysis(CSV_PATH)
     entropies = analysis.entropy_analysis()
     print(entropies)
