@@ -26,11 +26,17 @@ import pandas as pd
 import numpy as np
 from scipy.stats import linregress, spearmanr
 # from scipy.signal import detrend
+from time import perf_counter as t
+
+from line_profiler import LineProfiler
 
 
+starttime = t()
 # ? Probably delete self.bins
 # ? Argwhere and Nonzero
-class SeriesAnalysis:
+
+
+class SeriesAnalysis():
     '''A time series class that contains all the analysis work.'''
 
     def __init__(self, path, channels=None):
@@ -127,80 +133,88 @@ class SeriesAnalysis:
         entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
-    def rra(self, ts, n):
+    def rra(self, frame, scales):
         '''
         Calculates Rescale Range Analysis (by Hurst) of a time-series on a
         given vector of scales
 
         INPUTS:
-        ts            is the input time-series vector
-        n             is the vector of scales on which analysis will be performed
-              is the a-priori knowledge about the model (fBm or fGn) which TS fillows
+        frame       is the input time-series vector
+        scales      is the vector of scales on which analysis will be performed
 
         OUTPUTS:
         log_n         is the vector of scales' logarithms
         log_rs        is the vector of mean R/S's logarithms
         '''
 
-        N = len(ts)
-
+        startrra = t()
         log_n = []
         log_rs = []
 
-        for m in np.arange(0, len(n)):
-            iters = np.floor(N / n[m])  # (FIX)
-            if iters != 0:
-                r = []
-                s = []
-                rs = []
-                for nFrame in np.arange(0, iters):
-                    indx1 = int((nFrame) * n[m])
-                    indx2 = int((nFrame) * n[m] + n[m])
-                    series = ts[indx1:indx2]
+        for scale in scales:
+            startscale = t()
+            iters = math.floor(len(frame) / scale)  # (FIX)
 
-                    mean_adjusted_series = series - series.mean()
-                    adjusted_squared = mean_adjusted_series ** 2
+            r = []
+            s = []
+            rs = []
 
-                    # cumulative deviate series
-                    cum_deviate = mean_adjusted_series.cumsum()
+            # r_pd = s_pd = rs_pd = pd.Series(dtype='float64')
 
-                    r.append(cum_deviate.max() - cum_deviate.min())
+            for i in range(iters):
+                starti = t()
+                indx1 = i*scale
+                indx2 = i*scale + scale
+                subseries = frame[indx1:indx2]
+                # subseries = subseries.to_numpy()
+                mean_adjusted_series = subseries - subseries.mean()
+                adjusted_squared = mean_adjusted_series ** 2
+                # cumulative deviate series
+                cum_dev = mean_adjusted_series.cumsum()
 
-                    s.append(
-                        math.sqrt(adjusted_squared.sum() / n[m]))
+                # print(type(cum_dev))
+                r.append(cum_dev.max() - cum_dev.min())
+                s.append(
+                    math.sqrt(adjusted_squared.sum() / scale))
 
-                    if s[int(nFrame)] != 0:
-                        rs.append(r[int(nFrame)] / s[int(nFrame)])
-                    else:
-                        s[int(nFrame)] = np.finfo(float).eps
-                        rs.append(r[int(nFrame)] / s[int(nFrame)])
-
+                if s[i] == 0:
+                    s[i] = np.finfo(float).eps
+                rs.append(r[i] / s[i])
+                # print(f"End of i {i}: {round(t()-starti,6)}")
             try:
                 # Log, Log10, Log2 may be used as equivalents
                 log_rs.append(
                     math.log2(np.mean(np.real(rs)))
                 )
-                log_n.append(math.log2(n[m]))
+                log_n.append(math.log2(scale))
             except ValueError as error:
                 print(error)
                 return
+            # print(f'Time from {i}: {round(t()-starti, 6)}')
+            # print(f'Scale {scale}: {round(t() - startscale,6)}')
+
+        # print(f'RRA: {t()-startrra}')
         return log_rs, log_n
 
     def hurst_analysis(self):
-
+        '''Calculates and returns Hurst Exponent, R Squared and log(a)
+        '''
         hurst_analysis = pd.DataFrame()
 
         # Setting maximum scale and calculating power of 2
         power_array = self.power_array(256)
-
         # New Code
         for frame_number in range(self.total_frames):
             frame, start, stop = self.frame_values(frame_number)
-            # print((frame != 0).any())
             for column in frame:
                 # Calculation of R/S
                 try:
-                    log_rs, log_n = self.rra(frame[column], power_array)
+                    s = frame[column].to_numpy()
+                    log_rs, log_n = self.rra(s, power_array)
+                    # lp = LineProfiler()
+                    # lp_wrapper = lp(self.rra)
+                    # lp_wrapper(s, power_array)
+                    # lp.print_stats()
                     # Linear Fit of R/S
                     hurst, log_a = np.polyfit(log_n, log_rs, 1)
                     r_squared = linregress(log_n, log_rs).rvalue ** 2
@@ -217,8 +231,8 @@ class SeriesAnalysis:
                         'log_a': log_a,
                         'r_squared': r_squared},
                     index=[start, stop-1])
-
-                hurst_analysis = pd.concat([hurst_analysis, results])
+            hurst_analysis = pd.concat([hurst_analysis, results])
+            # break
         # Sort each channel by index
         hurst_analysis = hurst_analysis.sort_values(
             by=['channel'], kind='mergesort')
@@ -227,7 +241,10 @@ class SeriesAnalysis:
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, 'ch3')
-    print(analysis.power_array(256))
-    entropies = analysis.hurst_analysis()
-    print(entropies)
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3'])
+    hurst = analysis.hurst_analysis()
+    # lp = LineProfiler()
+    # lp_wrapper = lp(SeriesAnalysis(CSV_PATH, ['ch3']))
+    # lp_wrapper(hurst_analysis())
+    # lp.print_stats()
+    print(hurst)
