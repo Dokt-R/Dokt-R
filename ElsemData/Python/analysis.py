@@ -19,6 +19,7 @@ Tsallis:
     PHYSICAL REVIEW E 66, 046134 (2002)
 '''
 
+from typing_extensions import final
 from scipy.stats import linregress
 import math
 import pandas as pd
@@ -77,6 +78,15 @@ class SeriesAnalysis:
         stop = start + self.frame_size
         return self.df[start:stop], start, stop
 
+    def power_array(self, scale):
+        '''Calculates power of 2 array based on scale and series size'''
+        scale_2 = math.floor(math.log2(scale))
+        n_max = math.floor(math.log2(len(self)))
+        power = pd.Series([
+            2**(j+2) for j in range(1, min(scale_2, n_max)-1)
+        ])
+        return power
+
     def entropy_analysis(self):
         '''OUTPUT:
         shannon = Calculates Shannon Information (AntEntropy, i.e., opposite to
@@ -117,9 +127,9 @@ class SeriesAnalysis:
         entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
-    def rs1(self, ts, n):
+    def rra(self, ts, n):
         '''
-        RS1 calculates Rescale Range Analysis (by Hurst) of a time-series on a
+        Calculates Rescale Range Analysis (by Hurst) of a time-series on a
         given vector of scales
 
         INPUTS:
@@ -135,7 +145,7 @@ class SeriesAnalysis:
         N = len(ts)
 
         log_n = []
-        log_RS = []
+        log_rs = []
 
         for m in np.arange(0, len(n)):
             iters = np.floor(N / n[m])  # (FIX)
@@ -146,22 +156,18 @@ class SeriesAnalysis:
                 for nFrame in np.arange(0, iters):
                     indx1 = int((nFrame) * n[m])
                     indx2 = int((nFrame) * n[m] + n[m])
-                    x = ts[indx1:indx2]
-                    xm = np.mean(x)
-                    # mean of time series
+                    series = ts[indx1:indx2]
 
-                    yN = x - xm
-                    # mean-adjusted time series
+                    mean_adjusted_series = series - series.mean()
+                    adjusted_squared = mean_adjusted_series ** 2
 
-                    ynN = np.cumsum(yN)  # cumulative deviate series
+                    # cumulative deviate series
+                    cum_deviate = mean_adjusted_series.cumsum()
 
-                    xnm = xm
-                    # Ayto den to ksekatharizei stoy Eftaxia to
-                    # kai einai kapws diaforetiko stoy Qian
+                    r.append(cum_deviate.max() - cum_deviate.min())
 
-                    r.append(max(ynN) - min(ynN))
-
-                    s.append(math.sqrt(((sum((x - xnm) ** 2))) / n[m]))
+                    s.append(
+                        math.sqrt(adjusted_squared.sum() / n[m]))
 
                     if s[int(nFrame)] != 0:
                         rs.append(r[int(nFrame)] / s[int(nFrame)])
@@ -169,88 +175,59 @@ class SeriesAnalysis:
                         s[int(nFrame)] = np.finfo(float).eps
                         rs.append(r[int(nFrame)] / s[int(nFrame)])
 
-            log_RS.append(
-                math.log2(np.mean(np.real(rs)))
-            )  # Log, Log10, Log2 may be used as equivalents
-            # Log, Log10, Log2 may be used as equivalents
-            log_n.append(math.log2(n[m]))
-        return log_RS, log_n
+            try:
+                # Log, Log10, Log2 may be used as equivalents
+                log_rs.append(
+                    math.log2(np.mean(np.real(rs)))
+                )
+                log_n.append(math.log2(n[m]))
+            except ValueError as error:
+                print(error)
+                return
+        return log_rs, log_n
 
     def hurst_analysis(self):
-        # Get maximum scale value, if desirable to have one
 
-        Sc_max = 256
-        Sc_max_pow2 = math.floor(math.log2(Sc_max))
+        hurst_analysis = pd.DataFrame()
 
-        n_w = math.floor((len(self) - self.frame_size) / self.inc) + 1
-
-        h = []
-        log_a = []
-        rr = []
+        # Setting maximum scale and calculating power of 2
+        power_array = self.power_array(256)
 
         # New Code
         for frame_number in range(self.total_frames):
-            frame = self.frame_values(frame_number)
+            frame, start, stop = self.frame_values(frame_number)
+            # print((frame != 0).any())
             for column in frame:
-                n = column.shape()  # ?
-                n_max = math.floor(math.log2(n))
-
-                n_arr = []
-                for j in np.arange(1, min(Sc_max_pow2, n_max) - 1):
-                    n_arr.append(2 ** (j + 2))
-
                 # Calculation of R/S
-                log_rs, log_n = rs1(column, n_arr)
-
-                # Linear Fit of R/S
-
-                # This is the one that gives correct estimates of r^2
-                if sum(np.isnan(log_rs)) > 0:  # ! Needs Fix for NaN Values
+                try:
+                    log_rs, log_n = self.rra(frame[column], power_array)
+                    # Linear Fit of R/S
+                    hurst, log_a = np.polyfit(log_n, log_rs, 1)
+                    r_squared = linregress(log_n, log_rs).rvalue ** 2
+                except TypeError as error:
+                    print(error)
                     # H[ind1:ind2] = NaN.*ones(w,1)
                     # log_a[ind1:ind2] = NaN.*ones(w,1)
                     # rr[ind1:ind2] = NaN.*ones(w,1)
-                    print("F")
-                else:
-                    p = np.polyfit(log_n, log_rs, 1)
-                    # p_val = np.polyval(p, log_rs)
-                    # log_rs_eval = np.polyval(p, log_n)
-                    r2 = linregress(log_n, log_rs).rvalue ** 2
-                    while ind1 < ind2:
-                        h.append(p[0])
-                        log_a.append(p[1])
-                        rr.append(r2)
-                        ind1 += 1
+                    hurst = log_a = r_squared = np.nan
 
-        # Original code (Will be deleted)
-        for q in np.arange(1, n_w + 1):
-            ind1 = (q - 1) * self.inc
-            ind2 = (q - 1) * self.inc + self.frame_size
-            X_tot_w = self.df[ind1:ind2]
-            n = len(X_tot_w)  # length of time series
-            n_max = math.floor(math.log2(n))
+                results = pd.DataFrame(
+                    {'channel':  column,
+                        'hurst': hurst,
+                        'log_a': log_a,
+                        'r_squared': r_squared},
+                    index=[start, stop-1])
 
-            n_arr = []
-            for j in np.arange(1, min(Sc_max_pow2, n_max) - 1):
-                n_arr.append(2 ** (j + 2))
-
-            # Calculation of R/S
-            log_RS, log_n = rs1(X_tot_w, n_arr)
-
-            # Linear Fit of R/S
-
-            p = np.polyfit(log_n, log_RS, 1)
-            # p_val = np.polyval(p, log_RS)
-            # log_RS_eval = np.polyval(p, log_n)
-            r2 = linregress(log_n, log_RS).rvalue ** 2
-            while ind1 < ind2:
-                h.append(p[0])
-                log_a.append(p[1])
-                rr.append(r2)
-                ind1 += 1
+                hurst_analysis = pd.concat([hurst_analysis, results])
+        # Sort each channel by index
+        hurst_analysis = hurst_analysis.sort_values(
+            by=['channel'], kind='mergesort')
+        return hurst_analysis
 
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH)
-    entropies = analysis.entropy_analysis()
+    analysis = SeriesAnalysis(CSV_PATH, 'ch3')
+    print(analysis.power_array(256))
+    entropies = analysis.hurst_analysis()
     print(entropies)
