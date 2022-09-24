@@ -144,3 +144,4 @@ for q in np.arange(1, n_w + 1):
             log_a.append(p[1])
             rr.append(r2)
             ind1 += 1
+print()
