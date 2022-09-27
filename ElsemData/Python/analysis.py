@@ -383,11 +383,9 @@ class SeriesAnalysis():
             # Construct time series to analyze
             x = frame - np.mean(frame)
 
-            n = len(x)
-
             # Construct wavenumber array used in transform [Eqn(5)]
-            k = np.arange(1, np.fix(n / 2) + 1)
-            k = k * ((2 * math.pi)/n)
+            k = np.arange(1, np.fix(self.frame_size / 2) + 1)
+            k = k * ((2 * math.pi)/self.frame_size)
             kk = np.flip(-k, 0)
             k = np.append(k, kk[1:])
             k = np.insert(k, [0], 0)
@@ -399,7 +397,7 @@ class SeriesAnalysis():
             scale = 2 * 2**(np.arange(0, scales_no) * spacing)
 
             # Define the Wavelet Array. Should be Complex type
-            wave = np.zeros((scales_no, n), dtype=np.complex_)
+            wave = np.zeros((scales_no, self.frame_size), dtype=np.complex_)
 
             # Loop through all scales and compute transform
             for a1 in np.arange(0, scales_no):
@@ -411,27 +409,33 @@ class SeriesAnalysis():
             period = fourier_factor * scale
 
             return wave, period
+
+        def calculations(wave, period):
+            '''Calculate b(t) and r^2 given wave and period'''
+            log_power_spectrum = np.log10(
+                (sum(np.abs(wave.transpose()) ** 2)))
+
+            log_f = np.log10(1 / period[0:-8])
+
+            # p[0]=b(t), p[1]=log_a
+            p = np.polyfit(log_f, log_power_spectrum[0:-8], 1)
+
+            correlation = spearmanr(
+                log_f, log_power_spectrum[0:-8]).correlation
+
+            return p[0], correlation**2
+
         power_analysis = pd.DataFrame()
 
         for column in self.df:
             for frame_number in range(self.total_frames):
                 start, stop, frame = self.frame_values(frame_number)
                 wave, period = wavelet(frame[column])
-                log_power_spectrum = np.log10(
-                    (sum(np.abs(wave.transpose()) ** 2)))
-
-                log_f = np.log10(1 / period[0:-8])
-
-                # p[0]=b(t), p[1]=log_a
-                p = np.polyfit(log_f, log_power_spectrum[0:-8], 1)
-
-                correlation = spearmanr(
-                    log_f, log_power_spectrum[0:-8]).correlation
-
+                b_t, r_squared = calculations(wave, period)
                 results = pd.DataFrame(
                     {'channel':  column,
-                        'b_t': p[0],
-                        'r_squared': correlation**2},
+                        'b_t': b_t,
+                        'r_squared': r_squared},
                     index=[start, stop-1])
                 power_analysis = pd.concat([power_analysis, results])
 
