@@ -397,7 +397,7 @@ class SeriesAnalysis():
             fast_fourier = np.fft.fft(x)  # [Eqn(3)]
 
             # Construct scale array & empty period & wave arrays
-            scale = 4 ** (np.arange(0, j1 + 1) * spacing)
+            scale = 2 * 2**(np.arange(0, j1 + 1) * spacing)
 
             # Define the Wavelet Array. Should be Complex type
             wave = np.zeros((int(j1 + 1), n), dtype=np.complex_)
