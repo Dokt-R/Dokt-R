@@ -43,6 +43,7 @@ Wave Bases Functions:
     E-mail: torrence@ucar.edu              E-mail: gpc@cdc.noaa.gov
 '''
 
+from collections import namedtuple
 import math
 import pandas as pd
 import numpy as np
@@ -106,9 +107,15 @@ class SeriesAnalysis():
     def frame_values(self, frame_number):
         '''Return the values of at a given frame window
         E.g: Series[1024:2048]'''
+        Fram = namedtuple('Fram', ['start', 'stop', 'frame'])
         start = frame_number * self.inc
         stop = start + self.frame_size
-        return self.df[start:stop], start, stop
+        frame = self.df[start:stop]
+        return Fram(
+            start,
+            stop,
+            frame
+        )
 
     def power_array(self, scale):
         '''Calculates power of 2 array based on scale and series size'''
@@ -132,7 +139,7 @@ class SeriesAnalysis():
             frame, start, stop = self.frame_values(frame_number)
             for column in frame.columns:
                 hist, bin_edges = np.histogram(
-                    frame[column])  # Histogram Graph
+                    frame[column])
                 index_array = np.nonzero(hist)
                 hist = hist[index_array]
                 hist = hist / sum(hist)
@@ -215,7 +222,7 @@ class SeriesAnalysis():
 
         return log_rs, log_n
 
-    def hurst_analysis(self):
+    def hurst(self):
         '''Calculates and returns Hurst Exponent, R Squared and log(a)
         '''
         hurst_analysis = pd.DataFrame()
@@ -223,9 +230,9 @@ class SeriesAnalysis():
         # Setting maximum scale and calculating power of 2
         power_array = self.power_array(256)
 
-        for frame_number in range(self.total_frames):
-            frame, start, stop = self.frame_values(frame_number)
-            for column in frame:
+        for column in self.df:
+            for frame_number in range(self.total_frames):
+                start, stop, frame = self.frame_values(frame_number)
                 # Calculation of R/S
                 try:
                     s = frame[column].to_numpy()
@@ -246,13 +253,11 @@ class SeriesAnalysis():
                         'log_a': log_a,
                         'r_squared': r_squared},
                     index=[start, stop-1])
-            hurst_analysis = pd.concat([hurst_analysis, results])
-        # Sort each channel by index
-        hurst_analysis = hurst_analysis.sort_values(
-            by=['channel'], kind='mergesort')
+                hurst_analysis = pd.concat([hurst_analysis, results])
+
         return hurst_analysis
 
-    def powerlaw(self, y):
+    def powerlaw(self):
         '''Power Law fitting function, using the wavelet.m function found at
         http://paos.colorado.edu/research/wavelets/ for wavelet transform.
         It is designed to be flexible in use, providing different possibilities
@@ -319,7 +324,7 @@ class SeriesAnalysis():
 
             return daughter, fourier_factor
 
-        def wavelet(y, j1=-1):
+        def wavelet(frame):
             '''WAVELET  1D Wavelet transform with optional singificance testing
 
             Custom version of wavelet.m that permits either 'log' or 'linear' scales
@@ -345,23 +350,20 @@ class SeriesAnalysis():
             The WAVELET power spectrum is ABS(WAVE)^2.
             Its units are sigma^2 (the time series variance).
 
-
-            OPTIONAL INPUTS:
-
-            *** Note *** setting any of the following to -1 will cause the default
-            value to be used.
+            -------------------------------------------------------------------
 
             spacing = the spacing between discrete scales. Default is 0.25.
             A smaller will give better scale resolution, but be slower to plot.
 
-            J1 = the of scales minus one. Scales range from S0 up to S0*2^(J1*spacing),
-            to give a total of (J1+1) scales. Default is J1 = (LOG2(N DT/S0))/spacing.
+            scale_no = the of scales minus one. Scales range from S0 up to
+            S0*2^(scale_no*spacing), to give a total of (scale_no+1) scales.
+            Default is scale_no = (LOG2(N DT/S0))/spacing.
 
 
             OPTIONAL OUTPUTS:
 
-            PERIOD = the vector of "Fourier" periods (in time units) that corresponds
-            to the SCALEs.
+            PERIOD = the vector of "Fourier" periods (in time units) that
+            corresponds to the SCALEs.
 
             SCALE = the vector of scale indices, given by S0*2^(j*spacing), j=0...J1
             where J1+1 is the total of scales.
@@ -376,13 +378,10 @@ class SeriesAnalysis():
             '''
 
             spacing = 0.25
-
-            if j1 == -1:
-                j1 = np.fix(
-                    (math.log(self.length/2) / math.log(2)) / spacing)
+            scales_no = 25
 
             # Construct time series to analyze
-            x = y - np.mean(y)
+            x = frame - np.mean(frame)
 
             n = len(x)
 
@@ -397,13 +396,13 @@ class SeriesAnalysis():
             fast_fourier = np.fft.fft(x)  # [Eqn(3)]
 
             # Construct scale array & empty period & wave arrays
-            scale = 2 * 2**(np.arange(0, j1 + 1) * spacing)
+            scale = 2 * 2**(np.arange(0, scales_no) * spacing)
 
             # Define the Wavelet Array. Should be Complex type
-            wave = np.zeros((int(j1 + 1), n), dtype=np.complex_)
+            wave = np.zeros((scales_no, n), dtype=np.complex_)
 
             # Loop through all scales and compute transform
-            for a1 in np.arange(0, j1 + 1):
+            for a1 in np.arange(0, scales_no):
                 a1 = int(a1)
                 daughter, fourier_factor = wave_bases(k, scale[a1])
                 # Wavelet transform[Eqn(4)]
@@ -411,54 +410,46 @@ class SeriesAnalysis():
 
             period = fourier_factor * scale
 
-            # ? get rid of padding before returning
-            wave = wave[:, 0:self.length]
             return wave, period
+        power_analysis = pd.DataFrame()
 
-        scales_no = 25
-        step = 1024  # 128; # 256;
+        for column in self.df:
+            for frame_number in range(self.total_frames):
+                start, stop, frame = self.frame_values(frame_number)
+                wave, period = wavelet(frame[column])
+                log_power_spectrum = np.log10(
+                    (sum(np.abs(wave.transpose()) ** 2)))
 
-        t = np.arange(1, self.length)
-        iters = (self.length - self.frame_size) / step
+                log_f = np.log10(1 / period[0:-8])
 
-        b = []
-        log_a = []
-        r_squared = []
-        tt = []
+                # p[0]=b(t), p[1]=log_a
+                p = np.polyfit(log_f, log_power_spectrum[0:-8], 1)
 
-        for j in range(int(iters)):
-            window = np.arange(0, self.frame_size)
-            wave, period = wavelet(
-                y[j * step + window], scales_no - 1
-            )
-            LOG_Power_Spectrum = np.log10((sum(np.abs(wave.transpose()) ** 2)))
+                correlation = spearmanr(
+                    log_f, log_power_spectrum[0:-8]).correlation
 
-            log_f = np.log10(1 / period[0:-8])
-            p = np.polyfit(log_f, LOG_Power_Spectrum[0:-8], 1)
+                results = pd.DataFrame(
+                    {'channel':  column,
+                        'b_t': p[0],
+                        'r_squared': correlation**2},
+                    index=[start, stop-1])
+                power_analysis = pd.concat([power_analysis, results])
 
-            r, pval = spearmanr(log_f, LOG_Power_Spectrum[0:-8])
-            # Profiling -> []
-            b = np.append(b, p[0])
-            log_a = np.append(log_a, p[1])
-            r_squared = np.append(r_squared, r ** 2)
-            tt = np.append(
-                tt, t[self.frame_size + ((j + 1) * step) - 1] / 3600)
-
-        return log_a, b, r_squared, tt
+        return power_analysis
 
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3'])
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch5'])
 
-    print(analysis.powerlaw(analysis.df['ch3']))
+    print(analysis.powerlaw())
 
     # f, log_a, b, rr, tt = powerlaw(
     #     input_signal,
     # )
     # with cProfile.Profile() as pr:
-    #     a = analysis.hurst_analysis()
-    # a.to_csv('hurst.csv')
+    #     a = analysis.powerlaw(analysis.df['ch3'])
+    # # a.to_csv('hurst.csv')
     # stats = pstats.Stats(pr)
     # stats.sort_stats(pstats.SortKey.TIME)
     # stats.print_stats()
