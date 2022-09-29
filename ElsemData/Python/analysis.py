@@ -26,7 +26,7 @@ Wave Bases Functions:
     sold and this copyright notice is reproduced on each copy made.  This
     routine is provided as is without any express or implied warranties
     whatsoever.
-    
+
     Notice: Please acknowledge the use of this program in any publications:
     ``Wavelet software was provided by C. Torrence and G. Compo,
     and is available at URL: http://paos.colorado.edu/research/wavelets/''.
@@ -67,28 +67,34 @@ class SeriesAnalysis():
 
     def __init__(self, path, channels=None):
         '''
-        k = Constant value, proposed: k=1, or k=1.3806503E-23 (Boltzmann constant)
+        k:
+            Constant, proposed: k=1, or k=1.3806503E-23 (Boltzmann constant)
 
-        q = Real-valued parameter associated to Tsallis Entropy, which quantifies
-        the degree of departure from extensivity. For a physical meaning it is
-        usually set to 1.8. The value q=1 is not permitted. The values q>1, q=1,
-        or q<1, correspond to subextensivity, extensivity or super-extensivity,
-        respectively. The parameter q behaves as a microscope for exploring
-        different regions of the measure PDF : for q > 1, the more singular
-        regions are amplified, while for q < 1 the less singular regions are
-        accentuated.Some times a scanning of optimum q is needed,
-        e.g. q = 1.1, 1.3, 1.5, 1.6, 1.8, 2, 2.5, 3
+        q:
+            Real-valued parameter associated to Tsallis Entropy, which
+            quantifies the degree of departure from extensivity. For a physical
+            meaning it is usually set to 1.8. The value q=1 is not permitted.
+            The values q>1, q=1, or q<1, correspond to subextensivity,
+            extensivity or super-extensivity, respectively. The parameter q
+            behaves as a microscope for exploring different regions of the
+            measure PDF : for q > 1, the more singular regions are amplified,
+            while for q < 1 the less singular regions are accentuated.
+            Some times a scanning of optimum q is needed,
+            e.g. q = 1.1, 1.3, 1.5, 1.6, 1.8, 2, 2.5, 3
         '''
+
+        self.csv = pd.read_csv(path)
+        self.station = self.csv.codename[1]
         # Avoids analysing the whole document if user selects columns
         if channels is None:
-            channels = list(range(2, 8))
+            self.df = self.csv.iloc[:, 2:8]
         elif isinstance(channels, list) is False:
             channels = [channels]
-
-        self.df = pd.read_csv(path, usecols=channels)
+            self.df = self.csv.loc[:, channels]
+        else:
+            self.df = self.csv.loc[:, channels]
 
         # The "window" used for the analysis of the series
-        self.length = len(self)
         self.frame_size = 1024
         self.overlap = 0
         # Increment is the "sliding" or "gliding"
@@ -97,7 +103,7 @@ class SeriesAnalysis():
         self.k = 1
         self.q = 1.8
 
-        self.total_frames = math.floor((self.length - self.frame_size) /
+        self.total_frames = math.floor((len(self) - self.frame_size) /
                                        self.inc) + 1
 
     def __len__(self):
@@ -120,7 +126,7 @@ class SeriesAnalysis():
     def power_array(self, scale):
         '''Calculates power of 2 array based on scale and series size'''
         scale_2 = math.floor(math.log2(scale))
-        n_max = math.floor(math.log2(self.length))
+        n_max = math.floor(math.log2(len(self)))
         power = pd.Series([
             2**(j+2) for j in range(1, min(scale_2, n_max)-1)
         ])
@@ -257,161 +263,154 @@ class SeriesAnalysis():
 
         return hurst_analysis
 
-    def powerlaw(self):
-        '''Power Law fitting function, using the wavelet.m function found at
+    def powerlaw(self, daily=True):
+        '''Power Law fitting function, is partly converted from a MATLAB
+        file using the wavelet.m function found at
         http://paos.colorado.edu/research/wavelets/ for wavelet transform.
-        It is designed to be flexible in use, providing different possibilities
-        of application and can be used either on GNU-Octave or on
-        Matlab
-        It is property of the ????? team.
 
-        INPUT ARGUMENTS:
+        Parameters:
 
-        step = rolling step for the estimation of power law fitting [in samples]
-        window_size = window_size for wavelet transform calculation [in samples]
-        scales_no = number of scales, default = 25
-        spacing = scale spacing, default = 0.25 for 'log' spacing, use integer for
-                linear spacing
+        daily: boolean
+            True:   Adds NaN values at the end to have an actual daily format
+                    of analysis.
+            False:  Should be set to false if analysis is done on series that
+                    do not follow a daily format.
 
-        OUTPUT ARGUMENTS:
+        Returns:
 
-        f = frequencies corresponding to central frequencies of scales
-        log_a = vector of the log10 of factor "a" of the fitted power law
-                "S(f)= a * f^b" through the time-series scanning with "step"
-                and "window_size"
-        b = vector of the exponents "b" of the fitted power law "S(f)= a * f^b"
-            through the time-series scanning with "step" and "window_size"
-        r_squared = R^2 of the Spearman correlation coefficients (showing the
-            quality of the linear -on log-log scale- curve fitting)
-        tt = table of all time vectors corresponding to the processed
-            time-series windows [hours]
+        power_analysis: pandas.DataFrame
+            'channel': channel analyzed,
+            'b_t': b(t),
+            'r_squared': correlation**2
+
+        Notes:
+
+        Parameter daily is set to True since the usual format of the series is
+        in daily files and then uploaded to a database. False is given as an
+        option in case someone wants to analyze a different size of series
+        E.g. a couple of hours, weekly, monthly
         '''
 
         def wave_bases(vector, scale):
-            '''WAVE_BASES  1D Wavelet functions Morlet, Paul, or DOG
-
+            '''
             Computes the wavelet function as a function of Fourier frequency,
             used for the wavelet transform in Fourier space.
-            (This program is called automatically by WAVELET)
+            (This program is called automatically by wavelet() function.)
 
-            INPUTS:
+            Parameters:
 
-            K = a vector, the Fourier frequencies at which to calculate the wavelet
-            SCALE = a number, the wavelet scale
+            vector: array_like (numpy.ndarray)
+                Fourier frequencies at which to calculate the wavelet.
+            scale: number (numpy.float64)
+                The wavelet scale.
 
-            OUTPUTS:
+            Returns:
 
-            DAUGHTER = a vector, the wavelet function
-            FOURIER_FACTOR = the ratio of Fourier period to scale
-            COI = a number, the cone-of-influence size at the scale
-            DOFMIN = a number, degrees of freedom for each point in the wavelet power
-            (either 2 for Morlet and Paul, or 1 for the DOG)
+            daughter: array_like (numpy.ndarray)
+                A vector, the wavelet function.
+            fourier_factor: float
+                The ratio of Fourier period to scale.
             '''
 
-            k0 = 6
-            kTrue = np.where(vector > 0.0, 1, 0)  # [1,0]  Boolean Array
-            exponent = -((scale * vector - k0) ** 2) / 2 * kTrue
+            k_0 = 6
+            k_boolean = np.where(vector > 0.0, 1, 0)  # [1,0]  Boolean Array
+            exponent = -((scale * vector - k_0) ** 2) / 2 * k_boolean
             norm = (
                 math.sqrt(scale * vector[1]) *
                 (math.pi ** (-0.25)) * math.sqrt(len(vector))
             )  # total energy=N   [Eqn(7)]
 
             daughter = np.exp(exponent) * norm
-            daughter = daughter * kTrue  # Heaviside step function
+            daughter = daughter * k_boolean  # Heaviside step function
             fourier_factor = (4 * math.pi) / (
-                k0 + math.sqrt(2 + k0 ** 2)
+                k_0 + math.sqrt(2 + k_0 ** 2)
             )  # Scale-->Fourier [Sec.3h]
 
             return daughter, fourier_factor
 
         def wavelet(frame):
-            '''WAVELET  1D Wavelet transform with optional singificance testing
-
-            Custom version of wavelet.m that permits either 'log' or 'linear' scales
-            spacing.
-
-            In case of "linear" scales spacing, it is proposed to use spacing=1,
-            S0=irrelevant  (e.g. = 1) and J1 = number of scales
-
+            '''
+            Custom version of wavelet.m
 
             Computes the wavelet transform of the vector Y (length N),
             with sampling rate DT = 1s.
 
-            By default, the Morlet wavelet (k0=6) is used.
-            The wavelet basis is normalized to have total energy=1 at all scales.
+            By default, the Morlet wavelet (k_0=6) is used.
+            The wavelet basis is normalized to have total energy=1 at all
+            scales.
 
-            INPUTS:
-            Y = the time series of length N.
+            Parameters:
 
-            OUTPUTS:
-            WAVE is the WAVELET transform of Y. This is a complex array
-            of dimensions (N,J1+1). FLOAT(WAVE) gives the WAVELET amplitude,
-            ATAN(IMAGINARY(WAVE),FLOAT(WAVE) gives the WAVELET phase.
-            The WAVELET power spectrum is ABS(WAVE)^2.
-            Its units are sigma^2 (the time series variance).
+            frame:
+                Time series of length self.frame_size.
 
-            -------------------------------------------------------------------
+            Returns:
 
-            spacing = the spacing between discrete scales. Default is 0.25.
-            A smaller will give better scale resolution, but be slower to plot.
+            wave: array_like (numpy.ndarray)
+                The wavelet transform of frame is a complex array.
+                Float(wave) gives the wavelet amplitude,
+                atan(imaginary(wave),float(wave) gives the wavelet phase.
+                The wavelet power spectrum is |wave|^2.
+                Its units are sigma^2 (the time series variance).
 
-            scale_no = the of scales minus one. Scales range from S0 up to
-            S0*2^(scale_no*spacing), to give a total of (scale_no+1) scales.
-            Default is scale_no = (LOG2(N DT/S0))/spacing.
-
-
-            OPTIONAL OUTPUTS:
-
-            PERIOD = the vector of "Fourier" periods (in time units) that
-            corresponds to the SCALEs.
-
-            SCALE = the vector of scale indices, given by S0*2^(j*spacing), j=0...J1
-            where J1+1 is the total of scales.
-
-            COI = if specified, then return the Cone-of-Influence, which is a vector
-            of N points that contains the maximum period of useful information
-            at that particular time.
-            Periods greater than this are subject to edge effects.
-            This can be used to plot COI lines on a contour plot by doing:
-            IDL>  CONTOUR,wavelet,time,period
-            IDL>  PLOTS,time,coi,NOCLIP=0
+            period: array_like (numpy.ndarray)
+                The vector of "Fourier" periods (in time units) that
+                corresponds to the scales.
             '''
 
             spacing = 0.25
             scales_no = 25
 
             # Construct time series to analyze
-            x = frame - np.mean(frame)
+            timeseries = frame - np.mean(frame)
 
             # Construct wavenumber array used in transform [Eqn(5)]
             k = np.arange(1, np.fix(self.frame_size / 2) + 1)
             k = k * ((2 * math.pi)/self.frame_size)
-            kk = np.flip(-k, 0)
-            k = np.append(k, kk[1:])
+            k_flip = np.flip(-k, 0)
+            k = np.append(k, k_flip[1:])
             k = np.insert(k, [0], 0)
 
             # Compute FFT of the time series
-            fast_fourier = np.fft.fft(x)  # [Eqn(3)]
+            fast_fourier = np.fft.fft(timeseries)  # [Eqn(3)]
 
             # Construct scale array & empty period & wave arrays
-            scale = 2 * 2**(np.arange(0, scales_no) * spacing)
+            scales = 2 * 2**(np.arange(0, scales_no) * spacing)
 
             # Define the Wavelet Array. Should be Complex type
             wave = np.zeros((scales_no, self.frame_size), dtype=np.complex_)
 
             # Loop through all scales and compute transform
-            for a1 in np.arange(0, scales_no):
-                a1 = int(a1)
-                daughter, fourier_factor = wave_bases(k, scale[a1])
+            for i, scale in enumerate(scales):
+                daughter, fourier_factor = wave_bases(k, scale)
                 # Wavelet transform[Eqn(4)]
-                wave[a1] = np.fft.ifft(fast_fourier * daughter)
+                wave[i] = np.fft.ifft(fast_fourier * daughter)
 
-            period = fourier_factor * scale
+            period = fourier_factor * scales
 
             return wave, period
 
         def calculations(wave, period):
-            '''Calculate b(t) and r^2 given wave and period'''
+            '''
+            A help function that calculates b(t) and r^2 given wave and period.
+
+            Parameters:
+
+            wave: array_like (numpy.ndarray)
+                The wavelet transform of frame is a complex array.
+                Float(wave) gives the wavelet amplitude,
+                atan(imaginary(wave),float(wave) gives the wavelet phase.
+                The wavelet power spectrum is |wave|^2.
+                Its units are sigma^2 (the time series variance).
+
+            period: array_like (numpy.ndarray)
+                The vector of "Fourier" periods (in time units) that
+                corresponds to the scales.
+
+            Returns:
+
+            b(t), r**2
+            '''
             log_power_spectrum = np.log10(
                 (sum(np.abs(wave.transpose()) ** 2)))
 
@@ -439,14 +438,25 @@ class SeriesAnalysis():
                     index=[start, stop-1])
                 power_analysis = pd.concat([power_analysis, results])
 
+            if daily is True:
+                nans = pd.DataFrame(
+                    {'channel':  column,
+                     'b_t': np.nan,
+                     'r_squared': np.nan},
+                    index=[86016, 86399]
+                )
+                power_analysis = pd.concat([power_analysis, nans])
+
         return power_analysis
 
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch5'])
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch4'])
 
     print(analysis.powerlaw())
+
+    # print(pd.read_csv(CSV_PATH, index_col='moment'))
 
     # f, log_a, b, rr, tt = powerlaw(
     #     input_signal,
