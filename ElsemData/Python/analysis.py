@@ -85,6 +85,7 @@ class SeriesAnalysis():
 
         self.csv = pd.read_csv(path)
         self.station = self.csv.codename[1]
+        self.moments = self.csv.moment
         # Avoids analysing the whole document if user selects columns
         if channels is None:
             self.df = self.csv.iloc[:, 2:8]
@@ -191,7 +192,7 @@ class SeriesAnalysis():
 
         log_n = []
         log_rs = []
-        for scale in scales:
+        for scale in scales[:-2]:
             iters = len(frame)//scale
             r = []
             s = []
@@ -425,8 +426,12 @@ class SeriesAnalysis():
             return p[0], correlation**2
 
         power_analysis = pd.DataFrame()
+        whole = pd.DataFrame()
 
         for column in self.df:
+            test = pd.DataFrame()
+            b_col = pd.DataFrame()
+            r_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
                 start, stop, frame = self.frame_values(frame_number)
                 wave, period = wavelet(frame[column])
@@ -437,6 +442,18 @@ class SeriesAnalysis():
                         'r_squared': r_squared},
                     index=[start, stop-1])
                 power_analysis = pd.concat([power_analysis, results])
+
+                b_concat = pd.DataFrame(
+                    {'analysis': 'b', column: b_t}, index=[start, stop-1])
+                b_col = pd.concat([b_col, b_concat])
+                r_concat = pd.DataFrame(
+                    {'analysis': 'r2', column: r_squared}, index=[start, stop-1])
+                r_col = pd.concat([r_col, r_concat])
+            test = pd.concat([test, b_col], axis=1)
+            test = pd.concat([test, r_col])
+            whole = pd.concat([whole, test], axis=1)
+            whole = whole.loc[:, ~whole.T.duplicated(keep='first')]
+            # print(whole)
 
             if daily is True:
                 nans = pd.DataFrame(
@@ -452,9 +469,10 @@ class SeriesAnalysis():
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch4'])
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3'])
 
     print(analysis.powerlaw())
+    print(analysis.hurst())
 
     # print(pd.read_csv(CSV_PATH, index_col='moment'))
 
