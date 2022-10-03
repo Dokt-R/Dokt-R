@@ -133,7 +133,7 @@ class SeriesAnalysis():
         ])
         return power
 
-    def entropy_analysis(self):
+    def entropies(self):
         '''OUTPUT:
         shannon = Calculates Shannon Information (AntEntropy, i.e., opposite to
                     Boltzmann-Gibbs-Shannon entropy)
@@ -142,11 +142,11 @@ class SeriesAnalysis():
                     returns Escort Tsallis Entropy
         '''
         entropies = pd.DataFrame()
-        for frame_number in range(self.total_frames):  # forward frame sliding
-            frame, start, stop = self.frame_values(frame_number)
-            for column in frame.columns:
-                hist, bin_edges = np.histogram(
-                    frame[column])
+        for column in self.df:
+            for frame_number in range(self.total_frames):  # forward frame sliding
+                start, stop, frame = self.frame_values(frame_number)
+                hist = np.histogram(
+                    frame[column])[0]
                 index_array = np.nonzero(hist)
                 hist = hist[index_array]
                 hist = hist / sum(hist)
@@ -425,54 +425,56 @@ class SeriesAnalysis():
 
             return p[0], correlation**2
 
-        power_analysis = pd.DataFrame()
-        whole = pd.DataFrame()
+        b_df = pd.DataFrame()
+        r_df = pd.DataFrame()
 
         for column in self.df:
-            test = pd.DataFrame()
             b_col = pd.DataFrame()
             r_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
                 start, stop, frame = self.frame_values(frame_number)
                 wave, period = wavelet(frame[column])
                 b_t, r_squared = calculations(wave, period)
-                results = pd.DataFrame(
-                    {'channel':  column,
-                        'b_t': b_t,
-                        'r_squared': r_squared},
-                    index=[start, stop-1])
-                power_analysis = pd.concat([power_analysis, results])
+                # results = pd.DataFrame(
+                #     {'channel':  column,
+                #         'b_t': b_t,
+                #         'r_squared': r_squared},
+                #     index=[start, stop-1])
+                # power_df = pd.concat([power_df, results])
 
                 b_concat = pd.DataFrame(
-                    {'analysis': 'b', column: b_t}, index=[start, stop-1])
+                    {column: b_t}, index=[start, stop-1])
                 b_col = pd.concat([b_col, b_concat])
+
                 r_concat = pd.DataFrame(
-                    {'analysis': 'r2', column: r_squared}, index=[start, stop-1])
+                    {column: r_squared}, index=[start, stop-1])
                 r_col = pd.concat([r_col, r_concat])
-            test = pd.concat([test, b_col], axis=1)
-            test = pd.concat([test, r_col])
-            whole = pd.concat([whole, test], axis=1)
-            whole = whole.loc[:, ~whole.T.duplicated(keep='first')]
-            # print(whole)
 
-            if daily is True:
-                nans = pd.DataFrame(
-                    {'channel':  column,
-                     'b_t': np.nan,
-                     'r_squared': np.nan},
-                    index=[86016, 86399]
-                )
-                power_analysis = pd.concat([power_analysis, nans])
+            try:
+                b_df[column] = b_col
+                r_df[column] = r_col
+            except ValueError:
+                b_df = pd.concat([b_df, b_col], axis=1)
+                r_df = pd.concat([r_df, r_col], axis=1)
 
-        return power_analysis
+            # power_df = pd.concat([power_df, test], axis=1)
+            # power_df = power_df.loc[:, ~power_df.T.duplicated(keep='first')]
+
+            # if daily is True:
+            #     nans = pd.DataFrame(index=[86016, 86399])
+            #     b_df = pd.concat([b_df, nans])
+            #     r_df = pd.concat([r_df, nans])
+
+        return b_df, r_df
 
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3'])
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch4'])
 
+    # print(analysis.entropies())
+    # print(analysis.hurst())
     print(analysis.powerlaw())
-    print(analysis.hurst())
 
     # print(pd.read_csv(CSV_PATH, index_col='moment'))
 
