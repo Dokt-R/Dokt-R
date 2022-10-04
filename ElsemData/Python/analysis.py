@@ -425,6 +425,47 @@ class SeriesAnalysis():
 
             return p[0], correlation**2
 
+        def append_column(dataframe, col_name, col_df):
+            '''
+            Either creates index for first column or appends new columns to a
+            dataframe.
+
+            Parameters:
+            dataframe: Pandas Dataframe to be returned.
+
+            col_name: Column name that will be created.
+
+            col_df: The dataframe that will be appended as a new column.
+
+            Returns:
+            dataframe: New dataframe with an appended column.
+            '''
+
+            try:
+                dataframe[col_name] = col_df
+            except ValueError:
+                dataframe = pd.concat([dataframe, col_df], axis=1)
+                if daily is True:
+                    nans = pd.DataFrame(index=[86016, 86399])
+                    dataframe = pd.concat([dataframe, nans])
+
+            return dataframe
+
+        def concat_column(dataframe, value, frame_number):
+            '''
+            Creates a column frame by frame and returns the result.
+
+            Parameters:
+            dataframe: The dataframe that the values will be appended to.
+
+            col_name
+            '''
+            start, stop = self.frame_values(frame_number)[:-1]
+            temp_df = pd.Series(value, index=[start, stop-1])
+            dataframe = pd.concat([dataframe, temp_df])
+
+            return dataframe
+
         b_df = pd.DataFrame()
         r_df = pd.DataFrame()
 
@@ -432,38 +473,15 @@ class SeriesAnalysis():
             b_col = pd.DataFrame()
             r_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
-                start, stop, frame = self.frame_values(frame_number)
+                frame = self.frame_values(frame_number).frame
                 wave, period = wavelet(frame[column])
                 b_t, r_squared = calculations(wave, period)
-                # results = pd.DataFrame(
-                #     {'channel':  column,
-                #         'b_t': b_t,
-                #         'r_squared': r_squared},
-                #     index=[start, stop-1])
-                # power_df = pd.concat([power_df, results])
 
-                b_concat = pd.DataFrame(
-                    {column: b_t}, index=[start, stop-1])
-                b_col = pd.concat([b_col, b_concat])
+                b_col = concat_column(b_col, b_t, frame_number)
+                r_col = concat_column(r_col, r_squared, frame_number)
 
-                r_concat = pd.DataFrame(
-                    {column: r_squared}, index=[start, stop-1])
-                r_col = pd.concat([r_col, r_concat])
-
-            try:
-                b_df[column] = b_col
-                r_df[column] = r_col
-            except ValueError:
-                b_df = pd.concat([b_df, b_col], axis=1)
-                r_df = pd.concat([r_df, r_col], axis=1)
-
-            # power_df = pd.concat([power_df, test], axis=1)
-            # power_df = power_df.loc[:, ~power_df.T.duplicated(keep='first')]
-
-            # if daily is True:
-            #     nans = pd.DataFrame(index=[86016, 86399])
-            #     b_df = pd.concat([b_df, nans])
-            #     r_df = pd.concat([r_df, nans])
+            b_df = append_column(b_df, column, b_col)
+            r_df = append_column(r_df, column, r_col)
 
         return b_df, r_df
 
