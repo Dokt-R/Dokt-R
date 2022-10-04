@@ -124,6 +124,20 @@ class SeriesAnalysis():
             frame
         )
 
+    def constant_column(self, frame_number, column):
+        '''
+        Returns True if a given column frame is a constant value. This is
+        needed since analysis on a constant value causes mathematical errors
+        such as zero division.
+        '''
+        start = frame_number * self.inc
+        stop = start + self.frame_size
+        frame = self.df[start:stop]
+
+        if (frame[column] - np.mean(frame[column])).all() == 0:
+            return True
+        return False
+
     def power_array(self, scale):
         '''Calculates power of 2 array based on scale and series size'''
         scale_2 = math.floor(math.log2(scale))
@@ -358,7 +372,6 @@ class SeriesAnalysis():
                 The vector of "Fourier" periods (in time units) that
                 corresponds to the scales.
             '''
-
             spacing = 0.25
             scales_no = 25
 
@@ -458,7 +471,13 @@ class SeriesAnalysis():
             Parameters:
             dataframe: The dataframe that the values will be appended to.
 
-            col_name
+            value: Value that will be appended to the start and end of frame.
+
+            frame_number: Used to calculate the start and end of frame
+
+            Returns:
+            dataframe: Dataframe with appended values to start and end of frame
+                        indexes
             '''
             start, stop = self.frame_values(frame_number)[:-1]
             temp_df = pd.Series(value, index=[start, stop-1])
@@ -474,12 +493,16 @@ class SeriesAnalysis():
             r_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
                 frame = self.frame_values(frame_number).frame
+                # If the frame is a constant then no analysis can be done
+                if self.constant_column(frame_number, column) is True:
+                    b_col = concat_column(b_col, np.nan, frame_number)
+                    r_col = concat_column(r_col, np.nan, frame_number)
+                    continue
                 wave, period = wavelet(frame[column])
                 b_t, r_squared = calculations(wave, period)
 
                 b_col = concat_column(b_col, b_t, frame_number)
                 r_col = concat_column(r_col, r_squared, frame_number)
-
             b_df = append_column(b_df, column, b_col)
             r_df = append_column(r_df, column, r_col)
 
@@ -488,7 +511,7 @@ class SeriesAnalysis():
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch4'])
+    analysis = SeriesAnalysis(CSV_PATH)
 
     # print(analysis.entropies())
     # print(analysis.hurst())
