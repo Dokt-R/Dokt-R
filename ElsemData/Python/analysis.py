@@ -187,65 +187,67 @@ class SeriesAnalysis():
         entropies = entropies.sort_values(by=['channel'], kind='mergesort')
         return entropies
 
-    def rra(self, frame, scales):
-        '''
-        Calculates Rescale Range Analysis (by Hurst) of a time-series on a
-        given vector of scales
-
-        INPUTS:
-        frame       is the input time-series vector
-        scales      is the vector of scales on which analysis will be performed
-
-        OUTPUTS:
-        log_n         is the vector of scales' logarithms
-        log_rs        is the vector of mean R/S's logarithms
-        '''
-
-        # Time series model fBm. If fGn delete this line
-        frame = np.diff(frame)
-
-        log_n = []
-        log_rs = []
-        for scale in scales[:-2]:
-            iters = len(frame)//scale
-            r = []
-            s = []
-            rs = []
-
-            for i in range(iters):
-                indx1 = i*scale
-                indx2 = i*scale + scale
-                subseries = frame[indx1:indx2]
-
-                subseries_mean = subseries.sum()/subseries.size
-                mean_adj_series = subseries - subseries_mean
-                adjusted_squared = mean_adj_series ** 2
-
-                # cumulative deviate series
-                cum_dev = mean_adj_series.cumsum()
-
-                r.append(max(cum_dev)-min(cum_dev))
-                s.append((adjusted_squared.sum() / scale)**0.5)
-
-                if s[i] == 0:
-                    s[i] = np.finfo(float).eps
-                rs.append(r[i] / s[i])
-
-            try:
-                # Log, Log10, Log2 may be used as equivalents
-                log_rs.append(
-                    math.log2(np.mean(np.real(rs)))
-                )
-                log_n.append(math.log2(scale))
-            except ValueError as error:
-                print(error)
-                return
-
-        return log_rs, log_n
-
     def hurst(self):
-        '''Calculates and returns Hurst Exponent, R Squared and log(a)
         '''
+        Calculates and returns Hurst Exponent, R Squared and log(a)
+        '''
+
+        def rra(frame, scales):
+            '''
+            Calculates Rescale Range Analysis (by Hurst) of a time-series on a
+            given vector of scales
+
+            INPUTS:
+            frame       is the input time-series vector
+            scales      is the vector of scales on which analysis will be performed
+
+            OUTPUTS:
+            log_n         is the vector of scales' logarithms
+            log_rs        is the vector of mean R/S's logarithms
+            '''
+
+            # Time series model fBm. If fGn delete this line
+            frame = np.diff(frame)
+
+            log_n = []
+            log_rs = []
+            for scale in scales[:-2]:
+                iters = len(frame)//scale
+                r = []
+                s = []
+                rs = []
+
+                for i in range(iters):
+                    indx1 = i*scale
+                    indx2 = i*scale + scale
+                    subseries = frame[indx1:indx2]
+
+                    subseries_mean = subseries.sum()/subseries.size
+                    mean_adj_series = subseries - subseries_mean
+                    adjusted_squared = mean_adj_series ** 2
+
+                    # cumulative deviate series
+                    cum_dev = mean_adj_series.cumsum()
+
+                    r.append(max(cum_dev)-min(cum_dev))
+                    s.append((adjusted_squared.sum() / scale)**0.5)
+
+                    if s[i] == 0:
+                        s[i] = np.finfo(float).eps
+                    rs.append(r[i] / s[i])
+
+                try:
+                    # Log, Log10, Log2 may be used as equivalents
+                    log_rs.append(
+                        math.log2(np.mean(np.real(rs)))
+                    )
+                    log_n.append(math.log2(scale))
+                except ValueError as error:
+                    print(error)
+                    return
+
+            return log_rs, log_n
+
         hurst_analysis = pd.DataFrame()
 
         # Setting maximum scale and calculating power of 2
@@ -257,7 +259,7 @@ class SeriesAnalysis():
                 # Calculation of R/S
                 try:
                     s = frame[column].to_numpy()
-                    log_rs, log_n = self.rra(s, power_array)
+                    log_rs, log_n = rra(s, power_array)
 
                     # Linear Fit of R/S
                     hurst, log_a = np.polyfit(log_n, log_rs, 1)
@@ -511,7 +513,7 @@ class SeriesAnalysis():
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH)
+    analysis = SeriesAnalysis(CSV_PATH, 'ch4')
 
     # print(analysis.entropies())
     # print(analysis.hurst())
