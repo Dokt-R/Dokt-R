@@ -61,6 +61,8 @@ file_handler = logging.FileHandler('analysis.log', 'w')
 file_handler.setFormatter(formatter)
 logger.addHandler(file_handler)
 
+daily = True
+
 
 class SeriesAnalysis():
     '''A time series class that contains all the analysis work.'''
@@ -124,6 +126,54 @@ class SeriesAnalysis():
             frame
         )
 
+    def concat_column(self, dataframe, value, frame_number):
+        '''
+        Creates a column frame by frame and returns the result.
+
+        Parameters:
+        dataframe: The dataframe that the values will be appended to.
+
+        value: Value that will be appended to the start and end of frame.
+
+        frame_number: Used to calculate the start and end of frame
+
+        Returns:
+        dataframe: Dataframe with appended values to start and end of frame
+                    indexes
+        '''
+        start, stop = self.frame_values(frame_number)[:-1]
+        temp_df = pd.Series(value, index=[start, stop-1])
+        dataframe = pd.concat([dataframe, temp_df])
+
+        return dataframe
+
+    def append_column(self, dataframe, col_name, col_df):
+        '''
+        Either creates index for first column or appends new columns to a
+        dataframe.
+
+        Parameters:
+        dataframe: Pandas Dataframe to be returned.
+
+        col_name: Column name that will be created.
+
+        col_df: The dataframe that will be appended as a new column.
+
+        Returns:
+        dataframe: New dataframe with an appended column.
+        '''
+
+        try:
+            dataframe[col_name] = col_df
+        except ValueError:
+            dataframe = pd.concat([dataframe, col_df], axis=1)
+            dataframe.rename(columns={0: col_name}, inplace=True)
+            if daily is True:
+                nans = pd.DataFrame(index=[86016, 86399])
+                dataframe = pd.concat([dataframe, nans])
+
+        return dataframe
+
     def catch_datalogger_error(self, frame_number, column):
         '''
         Returns True if a given column frame is a constant value. This is
@@ -168,16 +218,37 @@ class SeriesAnalysis():
         tsallis = calculates Tsallis(non-extensive) Entropy for specific q and
                     returns Escort Tsallis Entropy
         '''
-        entropies = pd.DataFrame()
+
+        fisher_df = pd.DataFrame()
+        tsallis_df = pd.DataFrame()
+        shannon_df = pd.DataFrame()
+
         for column in self.df:
-            for frame_number in range(self.total_frames):  # forward frame sliding
-                start, stop, frame = self.frame_values(frame_number)
+            fisher_col = pd.DataFrame()
+            tsallis_col = pd.DataFrame()
+            shannon_col = pd.DataFrame()
+
+            for frame_number in range(self.total_frames):
+                # If the frame is a constant then no analysis can be done
+                if self.catch_datalogger_error(frame_number, column) is True:
+                    fisher_col = self.concat_column(
+                        fisher_col, np.nan, frame_number)
+                    tsallis_col = self.concat_column(
+                        tsallis_col, np.nan, frame_number)
+                    shannon_col = self.concat_column(
+                        shannon_col, np.nan, frame_number)
+                    continue
+
+                frame = self.frame_values(frame_number).frame
+
                 hist = np.histogram(
-                    frame[column])[0]
+                    frame[column], 10)[0]
+
                 index_array = np.nonzero(hist)
                 hist = hist[index_array]
                 hist = hist / sum(hist)
-                shannon = sum(hist * np.log(hist))
+                shannon = sum(hist * np.log(hist))/np.log(len(index_array[0]))
+
                 # Fisher Entroy
                 if len(hist) == 1:
                     fisher = 0
@@ -189,16 +260,19 @@ class SeriesAnalysis():
                 # Tsallis Entropy
                 f_powerq = np.power(hist, self.q)
                 tsallis = (self.k / (self.q - 1)) * (1 - sum(f_powerq))
-                results = pd.DataFrame(
-                    {'channel':  column,
-                     'shannon': -shannon,
-                     'fisher': fisher,
-                     'tsallis': tsallis},
-                    index=[start, stop-1])
-                entropies = pd.concat([entropies, results])
-        # Sort each channel by index
-        entropies = entropies.sort_values(by=['channel'], kind='mergesort')
-        return entropies
+
+                shannon_col = self.concat_column(
+                    shannon_col, -shannon, frame_number)
+                fisher_col = self.concat_column(
+                    fisher_col, fisher, frame_number)
+                tsallis_col = self.concat_column(
+                    tsallis_col, tsallis, frame_number)
+
+            fisher_df = self.append_column(fisher_df, column, fisher_col)
+            tsallis_df = self.append_column(tsallis_df, column, tsallis_col)
+            shannon_df = self.append_column(shannon_df, column, shannon_col)
+
+        return fisher_df, tsallis_df, shannon_df
 
     def hurst(self):
         '''
@@ -261,39 +335,40 @@ class SeriesAnalysis():
 
             return log_rs, log_n
 
-        hurst_analysis = pd.DataFrame()
+        h_exp_df = pd.DataFrame()
+        r2_df = pd.DataFrame()
 
         # Setting maximum scale and calculating power of 2
         power_array = self.power_array(256)
 
         for column in self.df:
+            h_exp_col = pd.DataFrame()
+            r2_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
-                start, stop, frame = self.frame_values(frame_number)
-                # Calculation of R/S
-                try:
-                    s = frame[column].to_numpy()
-                    log_rs, log_n = rra(s, power_array)
+                # If the frame is a constant then no analysis can be done
+                if self.catch_datalogger_error(frame_number, column) is True:
+                    h_exp_col = self.concat_column(
+                        h_exp_col, np.nan, frame_number)
+                    r2_col = self.concat_column(r2_col, np.nan, frame_number)
+                    continue
 
-                    # Linear Fit of R/S
-                    hurst, log_a = np.polyfit(log_n, log_rs, 1)
-                    r_squared = linregress(log_n, log_rs).rvalue ** 2
-                except TypeError as error:
-                    print(f'Frame number {frame_number}: {error}')
-                    # H[ind1:ind2] = NaN.*ones(w,1)
-                    # log_a[ind1:ind2] = NaN.*ones(w,1)
-                    # rr[ind1:ind2] = NaN.*ones(w,1)
-                    hurst = log_a = r_squared = np.nan
-                results = pd.DataFrame(
-                    {'channel':  column,
-                        'hurst': hurst,
-                        'log_a': log_a,
-                        'r_squared': r_squared},
-                    index=[start, stop-1])
-                hurst_analysis = pd.concat([hurst_analysis, results])
+                frame = self.frame_values(frame_number).frame
 
-        return hurst_analysis
+                log_rs, log_n = rra(frame[column], power_array)
 
-    def powerlaw(self, daily=True):
+                # Linear Fit of R/S
+                hurst = np.polyfit(log_n, log_rs, 1)
+                r_squared = linregress(log_n, log_rs).rvalue ** 2
+
+                h_exp_col = self.concat_column(
+                    h_exp_col, hurst[0], frame_number)
+                r2_col = self.concat_column(r2_col, r_squared, frame_number)
+            h_exp_df = self.append_column(h_exp_df, column, h_exp_col)
+            r2_df = self.append_column(r2_df, column, r2_col)
+
+        return h_exp_df, r2_df
+
+    def powerlaw(self):
         '''
         Power Law fitting function, is partly converted from a MATLAB
         file using the wavelet.m function found at
@@ -452,54 +527,6 @@ class SeriesAnalysis():
 
             return p[0], correlation**2
 
-        def append_column(dataframe, col_name, col_df):
-            '''
-            Either creates index for first column or appends new columns to a
-            dataframe.
-
-            Parameters:
-            dataframe: Pandas Dataframe to be returned.
-
-            col_name: Column name that will be created.
-
-            col_df: The dataframe that will be appended as a new column.
-
-            Returns:
-            dataframe: New dataframe with an appended column.
-            '''
-
-            try:
-                dataframe[col_name] = col_df
-            except ValueError:
-                dataframe = pd.concat([dataframe, col_df], axis=1)
-                dataframe.rename(columns={0: col_name}, inplace=True)
-                if daily is True:
-                    nans = pd.DataFrame(index=[86016, 86399])
-                    dataframe = pd.concat([dataframe, nans])
-
-            return dataframe
-
-        def concat_column(dataframe, value, frame_number):
-            '''
-            Creates a column frame by frame and returns the result.
-
-            Parameters:
-            dataframe: The dataframe that the values will be appended to.
-
-            value: Value that will be appended to the start and end of frame.
-
-            frame_number: Used to calculate the start and end of frame
-
-            Returns:
-            dataframe: Dataframe with appended values to start and end of frame
-                        indexes
-            '''
-            start, stop = self.frame_values(frame_number)[:-1]
-            temp_df = pd.Series(value, index=[start, stop-1])
-            dataframe = pd.concat([dataframe, temp_df])
-
-            return dataframe
-
         b_df = pd.DataFrame()
         r_df = pd.DataFrame()
 
@@ -509,37 +536,38 @@ class SeriesAnalysis():
             for frame_number in range(self.total_frames):
                 # If the frame is a constant then no analysis can be done
                 if self.catch_datalogger_error(frame_number, column) is True:
-                    b_col = concat_column(b_col, np.nan, frame_number)
-                    r_col = concat_column(r_col, np.nan, frame_number)
+                    b_col = self.concat_column(b_col, np.nan, frame_number)
+                    r_col = self.concat_column(r_col, np.nan, frame_number)
                     continue
                 frame = self.frame_values(frame_number).frame
                 wave, period = wavelet(frame[column])
                 b_t, r_squared = calculations(wave, period)
 
-                b_col = concat_column(b_col, b_t, frame_number)
-                r_col = concat_column(r_col, r_squared, frame_number)
-            b_df = append_column(b_df, column, b_col)
-            r_df = append_column(r_df, column, r_col)
+                b_col = self.concat_column(b_col, b_t, frame_number)
+                r_col = self.concat_column(r_col, r_squared, frame_number)
+            b_df = self.append_column(b_df, column, b_col)
+            r_df = self.append_column(r_df, column, r_col)
 
         return b_df, r_df
 
 
 if __name__ == '__main__':
-    CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch2'])
+    CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A201.csv'
+    analysis = SeriesAnalysis(CSV_PATH, ['ch6', 'ch2'])
 
-    # print(analysis.entropies())
-    # print(analysis.hurst())
-    print(analysis.powerlaw())
+    fisher, tsallis, shannon = analysis.entropies()
+    hurst_exponent, hurst_r2 = analysis.hurst()
+    b_t, power_r2 = analysis.powerlaw()
+
+    print(b_t)
+    print(power_r2)
+
+    fisher.to_csv('fisher')
+    tsallis.to_csv('tsallis')
+    shannon.to_csv('shannon')
+    hurst_exponent.to_csv('hurst_exponent')
+    hurst_r2.to_csv('hurst_r2')
+    b_t.to_csv('b_t')
+    power_r2.to_csv('power_r2')
 
     # print(pd.read_csv(CSV_PATH, index_col='moment'))
-
-    # f, log_a, b, rr, tt = powerlaw(
-    #     input_signal,
-    # )
-    # with cProfile.Profile() as pr:
-    #     a = analysis.powerlaw(analysis.df['ch3'])
-    # # a.to_csv('hurst.csv')
-    # stats = pstats.Stats(pr)
-    # stats.sort_stats(pstats.SortKey.TIME)
-    # stats.print_stats()
