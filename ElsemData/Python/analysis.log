@@ -1,0 +1,6 @@
+2022-12-11 15:02:31,469 - ERROR -> Data entries from 0 to 1024 are completely missing in ch2.
+                            Datalogger Error.
+2022-12-11 15:02:31,474 - ERROR -> A constant value (500.0) is recorded for ch2 at data entries 1024 - 2048.
+                         Datalogger Error.
+2022-12-11 15:02:31,479 - ERROR -> Data entries from 2048 to 3072 are partially missing in ch2.
+                         Datalogger Error.

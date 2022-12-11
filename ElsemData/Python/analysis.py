@@ -43,23 +43,23 @@ Wave Bases Functions:
     E-mail: torrence@ucar.edu              E-mail: gpc@cdc.noaa.gov
 '''
 
+import logging
+import os
+import mysql.connector
 from collections import namedtuple
 import math
 import pandas as pd
 import numpy as np
 from scipy.stats import linregress, spearmanr
 # from scipy.signal import detrend
-from time import perf_counter as t
 
-# Will Delete after done with profiling
-from line_profiler import LineProfiler
-import cProfile
-import pstats
-
-
-starttime = t()
-# ? Probably delete self.bins
-# ? Argwhere and Nonzero
+# Logger Settings
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter('%(asctime)s - %(levelname)s -> %(message)s')
+file_handler = logging.FileHandler('analysis.log', 'w')
+file_handler.setFormatter(formatter)
+logger.addHandler(file_handler)
 
 
 class SeriesAnalysis():
@@ -124,7 +124,7 @@ class SeriesAnalysis():
             frame
         )
 
-    def constant_column(self, frame_number, column):
+    def catch_datalogger_error(self, frame_number, column):
         '''
         Returns True if a given column frame is a constant value. This is
         needed since analysis on a constant value causes mathematical errors
@@ -134,7 +134,20 @@ class SeriesAnalysis():
         stop = start + self.frame_size
         frame = self.df[start:stop]
 
+        if np.count_nonzero(np.isnan(frame[column])) > 0:
+            if np.isnan(frame[column]).all():
+                logger.error("""Data entries from %s to %s are completely missing in %s.
+                            Datalogger Error.""",
+                             start, stop, column)
+                return True
+            logger.error("""Data entries from %s to %s are partially missing in %s.
+                         Datalogger Error.""",
+                         start, stop, column)
+            return True
         if (frame[column] - np.mean(frame[column])).all() == 0:
+            logger.error("""A constant value (%s) is recorded for %s at data entries %s - %s.
+                         Datalogger Error.""",
+                         np.mean(frame[column]), column, start, stop)
             return True
         return False
 
@@ -281,7 +294,8 @@ class SeriesAnalysis():
         return hurst_analysis
 
     def powerlaw(self, daily=True):
-        '''Power Law fitting function, is partly converted from a MATLAB
+        '''
+        Power Law fitting function, is partly converted from a MATLAB
         file using the wavelet.m function found at
         http://paos.colorado.edu/research/wavelets/ for wavelet transform.
 
@@ -379,7 +393,6 @@ class SeriesAnalysis():
 
             # Construct time series to analyze
             timeseries = frame - np.mean(frame)
-
             # Construct wavenumber array used in transform [Eqn(5)]
             k = np.arange(1, np.fix(self.frame_size / 2) + 1)
             k = k * ((2 * math.pi)/self.frame_size)
@@ -403,7 +416,6 @@ class SeriesAnalysis():
                 wave[i] = np.fft.ifft(fast_fourier * daughter)
 
             period = fourier_factor * scales
-
             return wave, period
 
         def calculations(wave, period):
@@ -460,6 +472,7 @@ class SeriesAnalysis():
                 dataframe[col_name] = col_df
             except ValueError:
                 dataframe = pd.concat([dataframe, col_df], axis=1)
+                dataframe.rename(columns={0: col_name}, inplace=True)
                 if daily is True:
                     nans = pd.DataFrame(index=[86016, 86399])
                     dataframe = pd.concat([dataframe, nans])
@@ -494,12 +507,12 @@ class SeriesAnalysis():
             b_col = pd.DataFrame()
             r_col = pd.DataFrame()
             for frame_number in range(self.total_frames):
-                frame = self.frame_values(frame_number).frame
                 # If the frame is a constant then no analysis can be done
-                if self.constant_column(frame_number, column) is True:
+                if self.catch_datalogger_error(frame_number, column) is True:
                     b_col = concat_column(b_col, np.nan, frame_number)
                     r_col = concat_column(r_col, np.nan, frame_number)
                     continue
+                frame = self.frame_values(frame_number).frame
                 wave, period = wavelet(frame[column])
                 b_t, r_squared = calculations(wave, period)
 
@@ -513,7 +526,7 @@ class SeriesAnalysis():
 
 if __name__ == '__main__':
     CSV_PATH = 'C:\\Users\\Doktar\\Desktop\\git\\Dokt-R\\ElsemData\\RawData\\A2020001.csv'
-    analysis = SeriesAnalysis(CSV_PATH, 'ch4')
+    analysis = SeriesAnalysis(CSV_PATH, ['ch3', 'ch2'])
 
     # print(analysis.entropies())
     # print(analysis.hurst())
